@@ -1,0 +1,119 @@
+<?php
+/**
+ * Modul Kategori Biaya - Tambah Kategori
+ * Sistem Informasi Usaha Tani Jambu Citra
+ */
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
+
+require_login();
+
+$pdo = get_db_connection();
+$errors = [];
+$old = [
+    'category_name' => '',
+    'description'   => ''
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validate_csrf_or_die();
+
+    $categoryName = trim($_POST['category_name'] ?? '');
+    $description  = trim($_POST['description'] ?? '');
+
+    $old = [
+        'category_name' => $categoryName,
+        'description'   => $description
+    ];
+
+    if (empty($categoryName)) {
+        $errors[] = 'Nama kategori biaya wajib diisi.';
+    } else {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM cost_categories WHERE category_name = ?");
+        $stmt->execute([$categoryName]);
+        if ($stmt->fetchColumn() > 0) {
+            $errors[] = 'Kategori dengan nama tersebut sudah ada.';
+        }
+    }
+
+    if (empty($errors)) {
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO cost_categories (category_name, description, created_at)
+                VALUES (?, ?, NOW())
+            ");
+            $stmt->execute([$categoryName, $description ?: null]);
+
+            set_flash('success', 'Kategori biaya berhasil ditambahkan!');
+            redirect('cost-categories/index.php');
+            exit;
+        } catch (PDOException $e) {
+            error_log('Insert Cost Category Error: ' . $e->getMessage());
+            $errors[] = 'Gagal menyimpan kategori: ' . $e->getMessage();
+        }
+    }
+}
+
+// Render HTML Layout setelah POST selesai
+$pageTitle = 'Tambah Kategori Biaya';
+$activePage = 'cost_categories';
+require_once __DIR__ . '/../includes/header.php';
+?>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h4 class="fw-bold mb-1"><i class="bi bi-tag-fill text-success me-2"></i>Tambah Kategori Biaya</h4>
+                <p class="text-muted small mb-0">Kelompokkan jenis pengeluaran operasional.</p>
+            </div>
+            <a href="<?= url('cost-categories/index.php'); ?>" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Kembali
+            </a>
+        </div>
+
+        <?php if (!empty($errors)): ?>
+            <div class="alert alert-danger py-2 mb-3">
+                <ul class="mb-0 ps-3">
+                    <?php foreach ($errors as $err): ?>
+                        <li><?= e($err); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="POST" action="">
+                    <?= csrf_field(); ?>
+
+                    <div class="mb-3">
+                        <label for="category_name" class="form-label">Nama Kategori Biaya <span class="text-danger">*</span></label>
+                        <input type="text" name="category_name" id="category_name" class="form-control" 
+                               value="<?= e($old['category_name']); ?>" placeholder="Contoh: Pembungkusan Buah" required autofocus>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="description" class="form-label">Deskripsi / Contoh Pengeluaran</label>
+                        <textarea name="description" id="description" rows="3" class="form-control" 
+                                  placeholder="Contoh: Pengadaan plastik brongsong, koran, dan tali pengikat buah jambu"><?= e($old['description']); ?></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="<?= url('cost-categories/index.php'); ?>" class="btn btn-light border px-4">Batal</a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-save me-1"></i> Simpan Kategori
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
